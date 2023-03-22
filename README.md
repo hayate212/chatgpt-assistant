@@ -7,6 +7,6 @@ HOME ディレクトリに `.chatgpt-assistant` ディレクトリが作成さ�
 ```bash
 $HOME
 └── .chatgpt-assistant
-    ├── .config # 設定ファイル
-    └── messages.json # ベースとなる会話の設定
+    ├── .env # 環境変数ファイル
+    └── config.yaml # 設定ファイル
 ```
