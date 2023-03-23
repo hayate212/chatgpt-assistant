@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gpt_client = gpt::GptClient::new(dotenv::var("API_KEY").unwrap());
 
     println!("Starting conversation with ChatGPT.");
-    println!("Please type 'quit' to end the conversation.");
+    println!("Please press 'Ctrl+c' to end the conversation.");
     if arg_oneshot {
         println!("{}{}{}", RED, "ONESHOT MODE", RESET)
     }
