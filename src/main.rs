@@ -19,6 +19,8 @@ struct Args {
     profile: Option<String>,
     #[arg(short = 'o', long)]
     oneshot: bool,
+    #[arg(short = 's', long)]
+    system_messages: Option<Vec<String>>,
 }
 
 #[tokio::main]
@@ -26,6 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let arg_profile = args.profile.unwrap_or("default".to_owned());
     let arg_oneshot = args.oneshot;
+    let arg_system_messages = args.system_messages.unwrap_or(vec![]);
 
     let config_dir = dirs::home_dir().unwrap().join(".chatgpt-assistant/");
     if !config_dir.exists() {
@@ -58,7 +61,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let messages = profile.unwrap().get_messages();
+    let mut messages = profile.unwrap().get_messages().clone();
+    for system_message in arg_system_messages {
+        messages.push(gpt::ChatMessage::new(system_message, "system".to_owned()));
+    }
     let gpt_client = gpt::GptClient::new(dotenv::var("API_KEY").unwrap());
 
     println!("Starting conversation with ChatGPT.");
@@ -67,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}{}{}", RED, "ONESHOT MODE", RESET)
     }
 
-    talk(&gpt_client, messages.clone(), arg_oneshot).await?;
+    talk(&gpt_client, messages, arg_oneshot).await?;
 
     Ok(())
 }
