@@ -1,15 +1,19 @@
 mod config;
 mod gpt;
 
-use std::io::Write;
+use std::io::{self, Write};
 
 use async_recursion::async_recursion;
 use clap::Parser;
 use dotenv;
-use termion::{color, style};
+use gpt::ChatMessage;
+use termion::{
+    color, cursor::DetectCursorPos, event::Key, input::TermRead, raw::IntoRawMode, style,
+};
 
 const RED: color::Fg<color::Red> = color::Fg(color::Red);
 const BLUE: color::Fg<color::Blue> = color::Fg(color::Blue);
+const GREEN: color::Fg<color::Green> = color::Fg(color::Green);
 const RESET: style::Reset = style::Reset;
 
 #[derive(Parser, Debug)]
@@ -84,14 +88,19 @@ async fn talk(
     before_messages: Vec<gpt::ChatMessage>,
     oneshot: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let line = read_line(format!("{}{}{}", BLUE, ">> ", RESET).as_str());
-
-    if line == "quit" {
-        return Ok(());
-    }
-
     let mut messages = before_messages.clone();
-    messages.push(gpt::ChatMessage::new(line, String::from("user")));
+    loop {
+        let message = match read_chatmessage() {
+            None => return Ok(()),
+            Some(c) => c,
+        };
+        println!();
+        messages.push(message.clone());
+
+        if message.get_role() == "user" {
+            break;
+        }
+    }
 
     let message = match gpt_client.chat_completions(&messages).await {
         Err(_) => return Ok(()),
@@ -112,6 +121,84 @@ async fn talk(
     talk(gpt_client, messages, oneshot).await?;
 
     Ok(())
+}
+
+enum RoleType {
+    User,
+    System,
+}
+struct Role {
+    t: RoleType,
+}
+impl Role {
+    fn new() -> Self {
+        Role { t: RoleType::User }
+    }
+    fn get_role_string(&self) -> String {
+        match self.t {
+            RoleType::User => "user".to_owned(),
+            RoleType::System => "system".to_owned(),
+        }
+    }
+    fn toggle(&mut self) {
+        self.t = match self.t {
+            RoleType::User => RoleType::System,
+            RoleType::System => RoleType::User,
+        };
+    }
+}
+
+fn read_chatmessage() -> Option<ChatMessage> {
+    let stdin = io::stdin();
+    let mut stdout = io::stdout().into_raw_mode().unwrap();
+    let mut str = String::new();
+    let mut role = Role::new();
+
+    let get_inline = |r: &Role| -> String {
+        let color = match r.t {
+            RoleType::System => format!("{}", RED),
+            RoleType::User => format!("{}", GREEN),
+        };
+        format!("{}[{}] {}", color, r.get_role_string(), RESET)
+    };
+
+    write!(stdout, "{}", get_inline(&role)).unwrap();
+    stdout.flush().unwrap();
+
+    for c in stdin.keys() {
+        str = match c.unwrap() {
+            Key::Char('\n') => break,
+            Key::Char('\t') => {
+                role.toggle();
+                str
+            }
+            Key::Char(c) => format!("{}{}", str, c),
+            Key::Backspace => {
+                if str.len() > 0 {
+                    let mut str = str.clone();
+                    str.pop();
+                    str
+                } else {
+                    str
+                }
+            }
+            Key::Ctrl('c') => return None,
+            _ => str,
+        };
+        let (_, y) = stdout.cursor_pos().unwrap();
+        write!(
+            stdout,
+            "{}{}{}{}",
+            termion::clear::CurrentLine,
+            termion::cursor::Goto(0, y),
+            get_inline(&role),
+            str
+        )
+        .unwrap();
+        stdout.flush().unwrap();
+    }
+
+    Some(gpt::ChatMessage::new(str, role.get_role_string()))
 }
 
 fn read_line(inline_message: &str) -> String {
