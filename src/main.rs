@@ -102,6 +102,7 @@ async fn talk(
         }
     }
 
+    let mut sp = spinners::Spinner::new(spinners::Spinners::SimpleDotsScrolling, "".into());
     let message = match gpt_client.chat_completions(&messages).await {
         Err(_) => return Ok(()),
         Ok(res) => {
@@ -110,8 +111,22 @@ async fn talk(
             message.clone()
         }
     };
-
-    println!("{}{}{}", BLUE, message.get_content().trim(), RESET);
+    sp.stop();
+    let mut stdout = io::stdout().into_raw_mode().unwrap();
+    let (_, y) = stdout.cursor_pos().unwrap();
+    write!(
+        stdout,
+        "{}{}{}[{: ^6}] {}{}",
+        termion::clear::CurrentLine,
+        termion::cursor::Goto(0, y),
+        BLUE,
+        "gpt",
+        message.get_content().trim(),
+        RESET
+    )
+    .unwrap();
+    stdout.flush().unwrap();
+    println!();
 
     if oneshot {
         return Ok(());
@@ -159,10 +174,23 @@ fn read_chatmessage() -> Option<ChatMessage> {
             RoleType::System => format!("{}", RED),
             RoleType::User => format!("{}", GREEN),
         };
-        format!("{}[{}] {}", color, r.get_role_string(), RESET)
+        format!(
+            "{}[{: ^6}] {}",
+            color,
+            r.get_role_string(),
+            RESET
+        )
     };
 
-    write!(stdout, "{}", get_inline(&role)).unwrap();
+    let (_, y) = stdout.cursor_pos().unwrap();
+    write!(
+        stdout,
+        "{}{}{}",
+        termion::clear::CurrentLine,
+        termion::cursor::Goto(0, y),
+        get_inline(&role)
+    )
+    .unwrap();
     stdout.flush().unwrap();
 
     for c in stdin.keys() {
